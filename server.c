@@ -3,50 +3,43 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <ctype.h>
 
-#define PORT 8081
+#define PORT 8080
 #define BUFFER_SIZE 1024
 
-// Convert to uppercase using ASCII
-void to_upper(char *str)
+void find_student(char *reg_no, char *response)
 {
-    for (int i = 0; str[i] != '\0'; i++)
+    FILE *fp = fopen("students.txt", "r");
+
+    if (fp == NULL)
     {
-        if (str[i] >= 'a' && str[i] <= 'z')
+        strcpy(response, "Error opening file");
+        return;
+    }
+
+    char file_reg[50], name[50], branch[50], college[100];
+    int found = 0;
+
+    while (fscanf(fp, "%s %s %s %s",
+                  file_reg, name, branch, college) != EOF)
+    {
+        if (strcmp(file_reg, reg_no) == 0)
         {
-            str[i] = str[i] - 32;
+            sprintf(response,
+                    "Name: %s, Branch: %s, College: %s",
+                    name, branch, college);
+
+            found = 1;
+            break;
         }
     }
-}
 
-// Convert to lowercase using ASCII
-void to_lower(char *str)
-{
-    for (int i = 0; str[i] != '\0'; i++)
+    if (!found)
     {
-        if (str[i] >= 'A' && str[i] <= 'Z')
-        {
-            str[i] = str[i] + 32;
-        }
+        strcpy(response, "Data not found");
     }
-}
 
-// Function to reverse string
-void reverse(char *str)
-{
-    int start = 0;
-    int end = strlen(str) - 1;
-
-    while (start < end)
-    {
-        char temp = str[start];
-        str[start] = str[end];
-        str[end] = temp;
-
-        start++;
-        end--;
-    }
+    fclose(fp);
 }
 
 int main()
@@ -55,12 +48,14 @@ int main()
     struct sockaddr_in address;
 
     int addrlen = sizeof(address);
+
     char buffer[BUFFER_SIZE];
+    char response[BUFFER_SIZE];
 
     // Create socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (server_fd == 0)
+    if (server_fd < 0)
     {
         perror("Socket failed");
         exit(EXIT_FAILURE);
@@ -75,6 +70,7 @@ int main()
              sizeof(address)) < 0)
     {
         perror("Bind failed");
+        close(server_fd);
         exit(EXIT_FAILURE);
     }
 
@@ -82,6 +78,7 @@ int main()
     if (listen(server_fd, 3) < 0)
     {
         perror("Listen failed");
+        close(server_fd);
         exit(EXIT_FAILURE);
     }
 
@@ -95,6 +92,7 @@ int main()
     if (new_socket < 0)
     {
         perror("Accept failed");
+        close(server_fd);
         exit(EXIT_FAILURE);
     }
 
@@ -104,44 +102,21 @@ int main()
     {
         memset(buffer, 0, BUFFER_SIZE);
 
-        int valread = read(new_socket, buffer, BUFFER_SIZE);
+        read(new_socket, buffer, BUFFER_SIZE);
 
-        if (valread <= 0)
-            break;
-
-        // Remove newline if present
+        // Remove newline
         buffer[strcspn(buffer, "\n")] = 0;
 
-        // Check for termination
+        // Exit condition
         if (strcmp(buffer, "bye") == 0)
         {
-            printf("Client sent bye.\n");
+            printf("Client disconnected.\n");
             break;
         }
 
-        char command[10], text[BUFFER_SIZE];
+        find_student(buffer, response);
 
-        // Parse input
-        sscanf(buffer, " %[^|]|%[^\n]", command, text);
-
-        if (strcmp(command, "UP") == 0)
-        {
-            to_upper(text);
-        }
-        else if (strcmp(command, "LOW") == 0)
-        {
-            to_lower(text);
-        }
-        else if (strcmp(command, "REV") == 0)
-        {
-            reverse(text);
-        }
-        else
-        {
-            strcpy(text, "Invalid Command");
-        }
-
-        send(new_socket, text, strlen(text), 0);
+        send(new_socket, response, strlen(response), 0);
     }
 
     close(new_socket);
